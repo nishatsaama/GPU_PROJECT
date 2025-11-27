@@ -1,0 +1,239 @@
+SIFT10K Concurrent FreshDiskANN Benchmark Results
+Date: Thu Nov 27 05:41:10 PM UTC 2025
+Configuration: L=40, k=10
+=================================================
+
+Warning: Read 10000 entries, expected 1000000
+
+╔════════════════════════════════════════════════════╗
+║   Concurrent FreshDiskANN Workload Executor        ║
+╚════════════════════════════════════════════════════╝
+
+Graph loaded: 1000000 points, 128 dimensions
+Loaded 100 queries with dimension 128
+Loaded groundtruth: 100 queries, k=100
+Loading workload: /DATA/cs24mtech12016/GPU-project/GPU-project/workload_query_only_400.jsonl
+Workload Summary:
+  Scenario: unknown
+  Total events: 400
+    Inserts: 0 (0%)
+    Deletes: 0 (0%)
+    Queries: 400 (100%)
+
+Configuration:
+  Alpha (α): 1.20
+  Consolidation threshold: 5.0%
+  Search list length (L): 40
+  Results per query (k): 10
+DeleteList initialized with capacity 1000000
+[BANG Optimization] Pre-loading 100 queries to GPU...
+  ✓ All queries loaded to GPU (0.05 MB)
+  ✓ Result buffer allocated on GPU (0.00 MB)
+BackgroundConsolidator initialized: 1000000 points, 128 dims, R=64, α=1.20
+  - Pre-allocated batch buffers for 10000 queries
+Concurrent executor initialized
+  - Version array allocated for 1000000 vertices
+  - 8 query streams with memory pools
+  - 4 insert streams with memory pools
+  - Query batch size: 10000
+  - Lock-free queues (capacity: 4096)
+Started 4 workers: 2 insert, 1 delete, 1 batch
+
+Starting concurrent workload execution...
+
+
+╔════════════════════════════════════════════════════╗
+║   Concurrent Workload Complete!                    ║
+╚════════════════════════════════════════════════════╝
+
+=== Concurrent Workload Statistics ===
+Inserts:        0
+Deletes:        0
+Queries:        400
+Consolidations: 0
+
+Timing:
+  Query avg:       0.047 ms
+  Query QPS:       21480.1
+  5-recall@5:      99.75%
+  10-recall@10:    99.67%
+
+Total execution time: 19.18 ms
+Throughput: 20853.8 ops/sec
+Warning: Read 10000 entries, expected 1000000
+
+╔════════════════════════════════════════════════════╗
+║   Concurrent FreshDiskANN Workload Executor        ║
+╚════════════════════════════════════════════════════╝
+
+Graph loaded: 1000000 points, 128 dimensions
+Loaded 100 queries with dimension 128
+Loaded groundtruth: 100 queries, k=100
+Loading workload: /DATA/cs24mtech12016/GPU-project/GPU-project/workload_query_heavy.jsonl
+Workload Summary:
+  Scenario: unknown
+  Total events: 400
+    Inserts: 12 (3%)
+    Deletes: 8 (2%)
+    Queries: 380 (95%)
+
+Configuration:
+  Alpha (α): 1.20
+  Consolidation threshold: 5.0%
+  Search list length (L): 40
+  Results per query (k): 10
+DeleteList initialized with capacity 1000000
+[BANG Optimization] Pre-loading 100 queries to GPU...
+  ✓ All queries loaded to GPU (0.05 MB)
+  ✓ Result buffer allocated on GPU (0.00 MB)
+BackgroundConsolidator initialized: 1000000 points, 128 dims, R=64, α=1.20
+  - Pre-allocated batch buffers for 10000 queries
+Concurrent executor initialized
+  - Version array allocated for 1000000 vertices
+  - 8 query streams with memory pools
+  - 4 insert streams with memory pools
+  - Query batch size: 10000
+  - Lock-free queues (capacity: 4096)
+Started 4 workers: 2 insert, 1 delete, 1 batch
+
+Starting concurrent workload execution...
+
+
+╔════════════════════════════════════════════════════╗
+║   Concurrent Workload Complete!                    ║
+╚════════════════════════════════════════════════════╝
+
+=== Concurrent Workload Statistics ===
+Inserts:        12
+Deletes:        8
+Queries:        380
+Consolidations: 0
+
+Timing:
+  Insert avg:      24.048 ms
+  Delete avg:      1.880 ms
+  Query avg:       0.368 ms
+  Query QPS:       2715.2
+  5-recall@5:      99.53%
+  10-recall@10:    99.63%
+
+Total execution time: 145.64 ms
+Throughput: 2746.5 ops/sec
+Warning: Read 10000 entries, expected 1000000
+
+╔════════════════════════════════════════════════════╗
+║   Concurrent FreshDiskANN Workload Executor        ║
+╚════════════════════════════════════════════════════╝
+
+Graph loaded: 1000000 points, 128 dimensions
+Loaded 100 queries with dimension 128
+Loaded groundtruth: 100 queries, k=100
+Loading workload: /DATA/cs24mtech12016/GPU-project/GPU-project/workload_balanced.jsonl
+Workload Summary:
+  Scenario: unknown
+  Total events: 400
+    Inserts: 100 (25%)
+    Deletes: 60 (15%)
+    Queries: 240 (60%)
+
+Configuration:
+  Alpha (α): 1.20
+  Consolidation threshold: 5.0%
+  Search list length (L): 40
+  Results per query (k): 10
+DeleteList initialized with capacity 1000000
+[BANG Optimization] Pre-loading 100 queries to GPU...
+  ✓ All queries loaded to GPU (0.05 MB)
+  ✓ Result buffer allocated on GPU (0.00 MB)
+BackgroundConsolidator initialized: 1000000 points, 128 dims, R=64, α=1.20
+  - Pre-allocated batch buffers for 10000 queries
+Concurrent executor initialized
+  - Version array allocated for 1000000 vertices
+  - 8 query streams with memory pools
+  - 4 insert streams with memory pools
+  - Query batch size: 10000
+  - Lock-free queues (capacity: 4096)
+Started 4 workers: 2 insert, 1 delete, 1 batch
+
+Starting concurrent workload execution...
+
+
+╔════════════════════════════════════════════════════╗
+║   Concurrent Workload Complete!                    ║
+╚════════════════════════════════════════════════════╝
+
+=== Concurrent Workload Statistics ===
+Inserts:        100
+Deletes:        60
+Queries:        240
+Consolidations: 0
+
+Timing:
+  Insert avg:      9.441 ms
+  Delete avg:      0.957 ms
+  Query avg:       0.569 ms
+  Query QPS:       1757.2
+  5-recall@5:      99.00%
+  10-recall@10:    98.62%
+
+Total execution time: 483.42 ms
+Throughput: 827.4 ops/sec
+Warning: Read 10000 entries, expected 1000000
+
+╔════════════════════════════════════════════════════╗
+║   Concurrent FreshDiskANN Workload Executor        ║
+╚════════════════════════════════════════════════════╝
+
+Graph loaded: 1000000 points, 128 dimensions
+Loaded 100 queries with dimension 128
+Loaded groundtruth: 100 queries, k=100
+Loading workload: /DATA/cs24mtech12016/GPU-project/GPU-project/workload_insert_heavy.jsonl
+Workload Summary:
+  Scenario: unknown
+  Total events: 400
+    Inserts: 200 (50%)
+    Deletes: 40 (10%)
+    Queries: 160 (40%)
+
+Configuration:
+  Alpha (α): 1.20
+  Consolidation threshold: 5.0%
+  Search list length (L): 40
+  Results per query (k): 10
+DeleteList initialized with capacity 1000000
+[BANG Optimization] Pre-loading 100 queries to GPU...
+  ✓ All queries loaded to GPU (0.05 MB)
+  ✓ Result buffer allocated on GPU (0.00 MB)
+BackgroundConsolidator initialized: 1000000 points, 128 dims, R=64, α=1.20
+  - Pre-allocated batch buffers for 10000 queries
+Concurrent executor initialized
+  - Version array allocated for 1000000 vertices
+  - 8 query streams with memory pools
+  - 4 insert streams with memory pools
+  - Query batch size: 10000
+  - Lock-free queues (capacity: 4096)
+Started 4 workers: 2 insert, 1 delete, 1 batch
+
+Starting concurrent workload execution...
+
+
+╔════════════════════════════════════════════════════╗
+║   Concurrent Workload Complete!                    ║
+╚════════════════════════════════════════════════════╝
+
+=== Concurrent Workload Statistics ===
+Inserts:        200
+Deletes:        40
+Queries:        160
+Consolidations: 0
+
+Timing:
+  Insert avg:      12.015 ms
+  Delete avg:      0.887 ms
+  Query avg:       1.448 ms
+  Query QPS:       690.6
+  5-recall@5:      98.88%
+  10-recall@10:    98.75%
+
+Total execution time: 1212.64 ms
+Throughput: 329.9 ops/sec
