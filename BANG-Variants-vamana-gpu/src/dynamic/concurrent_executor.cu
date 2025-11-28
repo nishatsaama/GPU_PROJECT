@@ -82,9 +82,9 @@ ConcurrentExecutor::ConcurrentExecutor(uint8_t* d_graph,
 
         // Pre-allocate result buffer on GPU
         cudaMalloc(&d_allResults, numQueries * k * sizeof(unsigned));
-        printf("  ✓ All queries loaded to GPU (%.2f MB)\n",
+        printf("  All queries loaded to GPU (%.2f MB)\n",
                (numQueries * D * sizeof(float)) / 1024.0 / 1024.0);
-        printf("  ✓ Result buffer allocated on GPU (%.2f MB)\n",
+        printf("  Result buffer allocated on GPU (%.2f MB)\n",
                (numQueries * k * sizeof(unsigned)) / 1024.0 / 1024.0);
     }
 
@@ -271,7 +271,7 @@ bool ConcurrentExecutor::checkConsolidation() {
                 return false;
             }
 
-            printf("\n⚠️  BACKGROUND CONSOLIDATION TRIGGERED (Deleted: %u/%u = %.2f%%)\n",
+            printf("\n BACKGROUND CONSOLIDATION TRIGGERED (Deleted: %u/%u = %.2f%%)\n",
                    deleteCount, N, (float)deleteCount / N * 100.0f);
             printf("[Info] GPU continues processing while CPU rebuilds edges...\n\n");
 
@@ -303,7 +303,7 @@ bool ConcurrentExecutor::checkConsolidation() {
 
         std::unique_lock<std::mutex> consoleLock(consolidateMutex);
 
-        printf("\n⚠️  STOP-THE-WORLD CONSOLIDATION (Deleted: %u/%u = %.2f%%)\n",
+        printf("\n STOP-THE-WORLD CONSOLIDATION (Deleted: %u/%u = %.2f%%)\n",
                deleteCount, N, (float)deleteCount / N * 100.0f);
 
         auto start = std::chrono::high_resolution_clock::now();
