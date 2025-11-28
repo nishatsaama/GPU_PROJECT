@@ -21,10 +21,11 @@ QUERY_FILE="$SCRIPT_DIR/data/siftsmall_query.bin"
 GT_FILE="$SCRIPT_DIR/data/siftsmall_groundtruth.bin"
 
 # Search parameters
-SEARCH_L=150
+SEARCH_L=20
 K=10
-WORKERS=8
-BATCH=100
+ALPHA=1.2
+CONSOLIDATE_THRESH=5.0
+DYNAMIC_GT="--dynamic-gt"  # Enable dynamic groundtruth for accurate recall
 
 cd "$SCRIPT_DIR"
 
@@ -64,32 +65,34 @@ if [ ! -f "./bin/concurrent_fresh_diskann" ]; then
 fi
 echo "✓ Concurrent executor found"
 
-# Check workloads
+# Check workloads - use test directory workloads
+WORKLOAD_DIR="$SCRIPT_DIR/test"
 WORKLOAD_MISSING=0
-if [ ! -f "$PROJECT_ROOT/workload_query_only_400.jsonl" ]; then
-    echo "Warning: workload_query_only_400.jsonl not found"
+
+if [ ! -f "$WORKLOAD_DIR/workload_query_only_400.jsonl" ]; then
+    echo "Warning: test/workload_query_only_400.jsonl not found"
     WORKLOAD_MISSING=1
 fi
-if [ ! -f "$PROJECT_ROOT/workload_query_heavy.jsonl" ]; then
-    echo "Warning: workload_query_heavy.jsonl not found"
+if [ ! -f "$WORKLOAD_DIR/workload_query_heavy_400.jsonl" ]; then
+    echo "Warning: test/workload_query_heavy_400.jsonl not found"
     WORKLOAD_MISSING=1
 fi
-if [ ! -f "$PROJECT_ROOT/workload_balanced.jsonl" ]; then
-    echo "Warning: workload_balanced.jsonl not found"
+if [ ! -f "$WORKLOAD_DIR/workload_balanced_400.jsonl" ]; then
+    echo "Warning: test/workload_balanced_400.jsonl not found"
     WORKLOAD_MISSING=1
 fi
-if [ ! -f "$PROJECT_ROOT/workload_insert_heavy.jsonl" ]; then
-    echo "Warning: workload_insert_heavy.jsonl not found"
+if [ ! -f "$WORKLOAD_DIR/workload_insert_heavy_400.jsonl" ]; then
+    echo "Warning: test/workload_insert_heavy_400.jsonl not found"
     WORKLOAD_MISSING=1
 fi
 
 if [ $WORKLOAD_MISSING -eq 1 ]; then
     echo ""
-    echo "Error: Some workload files are missing!"
-    echo "Please run ./run_10k.sh first to generate workloads!"
+    echo "Error: Some workload files are missing in test directory!"
+    echo "Please ensure workload files exist in $WORKLOAD_DIR"
     exit 1
 fi
-echo "✓ All workload files found"
+echo "✓ All workload files found in test/"
 echo ""
 
 echo "════════════════════════════════════════════════════"
@@ -102,7 +105,8 @@ RESULTS_FILE="benchmark_results_$(date +%Y%m%d_%H%M%S).txt"
 
 echo "SIFT10K Concurrent FreshDiskANN Benchmark Results" > $RESULTS_FILE
 echo "Date: $(date)" >> $RESULTS_FILE
-echo "Configuration: L=$SEARCH_L, k=$K" >> $RESULTS_FILE
+echo "Configuration: L=$SEARCH_L, k=$K, α=$ALPHA" >> $RESULTS_FILE
+echo "Dynamic Groundtruth: ENABLED (accurate streaming recall)" >> $RESULTS_FILE
 echo "=================================================" >> $RESULTS_FILE
 echo "" >> $RESULTS_FILE
 
@@ -111,13 +115,14 @@ echo "1. Query-Only (400 queries)"
 echo "-----------------------------------"
 ./bin/concurrent_fresh_diskann \
     $GRAPH_FILE \
-    $PROJECT_ROOT/workload_query_only_400.jsonl \
+    $WORKLOAD_DIR/workload_query_only_400.jsonl \
     $QUERY_FILE \
     $GT_FILE \
     --searchL $SEARCH_L \
     --k $K \
-    --workers $WORKERS \
-    --batch $BATCH 2>&1 | tee -a $RESULTS_FILE | grep -E "Insert avg|Delete avg|Query avg|Query QPS|recall@|Throughput"
+    --alpha $ALPHA \
+    --thresh $CONSOLIDATE_THRESH \
+    $DYNAMIC_GT 2>&1 | tee -a $RESULTS_FILE | grep -E "Insert avg|Delete avg|Query avg|Query QPS|recall@|Throughput|Queries processed"
 echo ""
 
 # 2. Query-Heavy
@@ -125,13 +130,14 @@ echo "2. Query-Heavy (12I + 8D + 380Q)"
 echo "-----------------------------------"
 ./bin/concurrent_fresh_diskann \
     $GRAPH_FILE \
-    $PROJECT_ROOT/workload_query_heavy.jsonl \
+    $WORKLOAD_DIR/workload_query_heavy_400.jsonl \
     $QUERY_FILE \
     $GT_FILE \
     --searchL $SEARCH_L \
     --k $K \
-    --workers $WORKERS \
-    --batch $BATCH 2>&1 | tee -a $RESULTS_FILE | grep -E "Insert avg|Delete avg|Query avg|Query QPS|recall@|Throughput"
+    --alpha $ALPHA \
+    --thresh $CONSOLIDATE_THRESH \
+    $DYNAMIC_GT 2>&1 | tee -a $RESULTS_FILE | grep -E "Insert avg|Delete avg|Query avg|Query QPS|recall@|Throughput|Queries processed"
 echo ""
 
 # 3. Balanced
@@ -139,13 +145,14 @@ echo "3. Balanced (100I + 60D + 240Q)"
 echo "-----------------------------------"
 ./bin/concurrent_fresh_diskann \
     $GRAPH_FILE \
-    $PROJECT_ROOT/workload_balanced.jsonl \
+    $WORKLOAD_DIR/workload_balanced_400.jsonl \
     $QUERY_FILE \
     $GT_FILE \
     --searchL $SEARCH_L \
     --k $K \
-    --workers $WORKERS \
-    --batch $BATCH 2>&1 | tee -a $RESULTS_FILE | grep -E "Insert avg|Delete avg|Query avg|Query QPS|recall@|Throughput"
+    --alpha $ALPHA \
+    --thresh $CONSOLIDATE_THRESH \
+    $DYNAMIC_GT 2>&1 | tee -a $RESULTS_FILE | grep -E "Insert avg|Delete avg|Query avg|Query QPS|recall@|Throughput|Queries processed"
 echo ""
 
 # 4. Insert-Heavy
@@ -153,13 +160,14 @@ echo "4. Insert-Heavy (200I + 40D + 160Q)"
 echo "-----------------------------------"
 ./bin/concurrent_fresh_diskann \
     $GRAPH_FILE \
-    $PROJECT_ROOT/workload_insert_heavy.jsonl \
+    $WORKLOAD_DIR/workload_insert_heavy_400.jsonl \
     $QUERY_FILE \
     $GT_FILE \
     --searchL $SEARCH_L \
     --k $K \
-    --workers $WORKERS \
-    --batch $BATCH 2>&1 | tee -a $RESULTS_FILE | grep -E "Insert avg|Delete avg|Query avg|Query QPS|recall@|Throughput"
+    --alpha $ALPHA \
+    --thresh $CONSOLIDATE_THRESH \
+    $DYNAMIC_GT 2>&1 | tee -a $RESULTS_FILE | grep -E "Insert avg|Delete avg|Query avg|Query QPS|recall@|Throughput|Queries processed"
 echo ""
 
 echo "════════════════════════════════════════════════════"

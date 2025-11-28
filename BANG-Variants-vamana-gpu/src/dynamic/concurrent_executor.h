@@ -9,6 +9,7 @@
 #include "lockfree_graph.cuh"
 #include "background_consolidate.h"
 #include "lockfree_queue.h"
+#include "streaming_groundtruth.h"
 #include <cuda_runtime.h>
 #include <queue>
 #include <mutex>
@@ -183,7 +184,9 @@ public:
                        unsigned searchL,
                        float alpha,
                        float consolidateThresh,
-                       bool useBackgroundConsolidation = true);
+                       bool useBackgroundConsolidation = true,
+                       bool useGPUGroundtruth = true,
+                       bool forceDynamicGroundtruth = false);
 
     ~ConcurrentExecutor();
 
@@ -246,6 +249,11 @@ private:
     BackgroundConsolidator* backgroundConsolidator;
     bool useBackgroundConsolidation;
 
+    // GPU-accelerated streaming groundtruth computation
+    StreamingGroundtruth* streamingGT;
+    bool useGPUGroundtruth;
+    bool forceDynamicGroundtruth;  // Force dynamic GT computation (ignore static GT)
+
     // Lock-free operation queues (no mutex needed for push/pop)
     LockFreeQueue<Operation>* insertQueueLF;
     LockFreeQueue<Operation>* deleteQueueLF;
@@ -272,6 +280,8 @@ private:
 
     // Helper functions
     void computeGroundtruthForQuery(float* d_queryVec, unsigned* h_gt, unsigned k, cudaStream_t stream);
+    void computeGroundtruthForQueryGPU(float* d_queryVec, unsigned* h_gt, unsigned k, cudaStream_t stream);
+    void computeBatchGroundtruthGPU(float* d_queryBatch, unsigned batchSize, unsigned* h_gtBatch, unsigned k, cudaStream_t stream);
     double calculateRecall(unsigned* groundtruth, unsigned* results,
                           unsigned gtK, unsigned k, unsigned recallK);
 

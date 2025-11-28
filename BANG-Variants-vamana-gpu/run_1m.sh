@@ -105,7 +105,7 @@ import struct
 import random
 
 N = 1000000
-R = 64  # Degree (edges per node)
+R = 60  # Degree (edges per node)
 output_file = "data/sift1m_randomgraph.bin"
 
 print(f"Generating random graph: N={N}, R={R}")

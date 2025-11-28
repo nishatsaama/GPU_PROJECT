@@ -21,10 +21,10 @@ QUERY_BIN="$SCRIPT_DIR/data/sift1m_query.bin"
 GT_BIN="$SCRIPT_DIR/data/sift1m_groundtruth.bin"
 
 # Search parameters
-SEARCH_L=150
+SEARCH_L=20
 K=10
 WORKERS=8
-BATCH=1000
+BATCH=50
 
 cd "$SCRIPT_DIR"
 

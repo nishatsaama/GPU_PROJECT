@@ -89,10 +89,13 @@ int main(int argc, char** argv) {
         printf("  query_file       (Optional) Query vectors for query_id-based queries\n");
         printf("  groundtruth_file (Optional) Groundtruth for query_id-based queries\n");
         printf("\nOptions:\n");
-        printf("  --alpha ALPHA    Alpha parameter for RobustPrune (default: 1.2)\n");
-        printf("  --thresh PERCENT Consolidation threshold percent (default: 5.0)\n");
-        printf("  --searchL L      Search list length (default: 100)\n");
-        printf("  --k K            Number of results to return (default: 10)\n");
+        printf("  --alpha ALPHA      Alpha parameter for RobustPrune (default: 1.2)\n");
+        printf("  --thresh PERCENT   Consolidation threshold percent (default: 5.0)\n");
+        printf("  --searchL L        Search list length (default: 100)\n");
+        printf("  --k K              Number of results to return (default: 10)\n");
+        printf("  --dynamic-gt       Enable dynamic groundtruth computation (for FreshDiskANN)\n");
+        printf("                     Computes exact GT after every batch, accounting for\n");
+        printf("                     insertions/deletions. Use for accurate streaming recall.\n");
         return 1;
     }
 
@@ -119,20 +122,23 @@ int main(int argc, char** argv) {
     float consolidateThresh = 5.0f;
     unsigned searchL = 100;
     unsigned k = 10;
+    bool dynamicGroundtruth = false;
 
-    for (int i = optionsStart; i < argc - 1; i++) {
-        if (strcmp(argv[i], "--alpha") == 0) {
+    for (int i = optionsStart; i < argc; i++) {
+        if (strcmp(argv[i], "--alpha") == 0 && i + 1 < argc) {
             alpha = atof(argv[i+1]);
             i++;
-        } else if (strcmp(argv[i], "--thresh") == 0) {
+        } else if (strcmp(argv[i], "--thresh") == 0 && i + 1 < argc) {
             consolidateThresh = atof(argv[i+1]);
             i++;
-        } else if (strcmp(argv[i], "--searchL") == 0) {
+        } else if (strcmp(argv[i], "--searchL") == 0 && i + 1 < argc) {
             searchL = atoi(argv[i+1]);
             i++;
-        } else if (strcmp(argv[i], "--k") == 0) {
+        } else if (strcmp(argv[i], "--k") == 0 && i + 1 < argc) {
             k = atoi(argv[i+1]);
             i++;
+        } else if (strcmp(argv[i], "--dynamic-gt") == 0) {
+            dynamicGroundtruth = true;
         }
     }
 
@@ -184,11 +190,15 @@ int main(int argc, char** argv) {
     printf("  Consolidation threshold: %.1f%%\n", consolidateThresh);
     printf("  Search list length (L): %u\n", searchL);
     printf("  Results per query (k): %u\n", k);
+    printf("  Dynamic groundtruth: %s\n", dynamicGroundtruth ? "ENABLED" : "disabled");
 
     // Initialize DeleteList and Concurrent Executor
     DeleteList deleteList(N);
     ConcurrentExecutor executor(d_graph, &deleteList, h_queries, numQueries, h_groundtruth,
-                                gtK, k, searchL, alpha, consolidateThresh);
+                                gtK, k, searchL, alpha, consolidateThresh,
+                                true,  // useBackgroundConsolidation
+                                true,  // useGPUGroundtruth
+                                dynamicGroundtruth);  // forceDynamicGroundtruth
 
     printf("\nStarting concurrent workload execution...\n\n");
 

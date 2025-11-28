@@ -64,11 +64,15 @@ ConcurrentExecutor::ConcurrentExecutor(uint8_t* d_graph,
                                        unsigned searchL,
                                        float alpha,
                                        float consolidateThresh,
-                                       bool useBackgroundConsolidation)
+                                       bool useBackgroundConsolidation,
+                                       bool useGPUGroundtruth,
+                                       bool forceDynamicGroundtruth)
     : d_graph(d_graph), deleteList(deleteList), h_queries(h_queries),
       numQueriesLoaded(numQueries), h_groundtruth(h_groundtruth), gtK(gtK), k(k), searchL(searchL),
       alpha(alpha), consolidateThresh(consolidateThresh),
-      useBackgroundConsolidation(useBackgroundConsolidation) {
+      useBackgroundConsolidation(useBackgroundConsolidation),
+      useGPUGroundtruth(useGPUGroundtruth),
+      forceDynamicGroundtruth(forceDynamicGroundtruth) {
 
     // BANG-STYLE OPTIMIZATION 1: Pre-load ALL queries to GPU (eliminate per-batch memcpy!)
     d_allQueries = nullptr;
@@ -82,9 +86,9 @@ ConcurrentExecutor::ConcurrentExecutor(uint8_t* d_graph,
 
         // Pre-allocate result buffer on GPU
         cudaMalloc(&d_allResults, numQueries * k * sizeof(unsigned));
-        printf("  All queries loaded to GPU (%.2f MB)\n",
+        printf("  ✓ All queries loaded to GPU (%.2f MB)\n",
                (numQueries * D * sizeof(float)) / 1024.0 / 1024.0);
-        printf("  Result buffer allocated on GPU (%.2f MB)\n",
+        printf("  ✓ Result buffer allocated on GPU (%.2f MB)\n",
                (numQueries * k * sizeof(unsigned)) / 1024.0 / 1024.0);
     }
 
@@ -96,6 +100,23 @@ ConcurrentExecutor::ConcurrentExecutor(uint8_t* d_graph,
         backgroundConsolidator = new BackgroundConsolidator(N, D, R, alpha);
     } else {
         backgroundConsolidator = nullptr;
+    }
+
+    // Initialize GPU-accelerated streaming groundtruth
+    streamingGT = nullptr;
+    if (useGPUGroundtruth) {
+        printf("[GPU Groundtruth] Initializing streaming groundtruth computation...\n");
+        unsigned graphEntrySize = D * sizeof(float) + (R + 1) * sizeof(unsigned);
+        streamingGT = new StreamingGroundtruth(d_graph, N, D, GT_BATCH_SIZE,
+                                               std::max(k, gtK), graphEntrySize);
+        streamingGT->setDeleteBitvector(deleteList->getDevicePointer());
+        printf("[GPU Groundtruth] Initialization complete\n");
+
+        if (forceDynamicGroundtruth) {
+            printf("[STREAMING MODE] Dynamic groundtruth will be computed for EVERY query\n");
+            printf("  ⚡ Ignoring static groundtruth - computing exact GT based on current index state\n");
+            printf("  ⚡ This accounts for insertions/deletions for accurate recall\n");
+        }
     }
 
     // Create CUDA stream pools for concurrent execution
@@ -167,6 +188,12 @@ ConcurrentExecutor::~ConcurrentExecutor() {
     if (backgroundConsolidator) {
         backgroundConsolidator->waitForCompletion();
         delete backgroundConsolidator;
+    }
+
+    // Cleanup streaming groundtruth
+    if (streamingGT) {
+        streamingGT->printStatistics();
+        delete streamingGT;
     }
 
     // Free lock-free queues
@@ -271,7 +298,7 @@ bool ConcurrentExecutor::checkConsolidation() {
                 return false;
             }
 
-            printf("\n BACKGROUND CONSOLIDATION TRIGGERED (Deleted: %u/%u = %.2f%%)\n",
+            printf("\n⚠️  BACKGROUND CONSOLIDATION TRIGGERED (Deleted: %u/%u = %.2f%%)\n",
                    deleteCount, N, (float)deleteCount / N * 100.0f);
             printf("[Info] GPU continues processing while CPU rebuilds edges...\n\n");
 
@@ -303,7 +330,7 @@ bool ConcurrentExecutor::checkConsolidation() {
 
         std::unique_lock<std::mutex> consoleLock(consolidateMutex);
 
-        printf("\n STOP-THE-WORLD CONSOLIDATION (Deleted: %u/%u = %.2f%%)\n",
+        printf("\n⚠️  STOP-THE-WORLD CONSOLIDATION (Deleted: %u/%u = %.2f%%)\n",
                deleteCount, N, (float)deleteCount / N * 100.0f);
 
         auto start = std::chrono::high_resolution_clock::now();
@@ -495,7 +522,8 @@ void ConcurrentExecutor::processQuery(const Operation& op) {
         // Query uses query_id - copy from query set to pinned memory
         unsigned queryId = op.event.queryId;
         memcpy(res.h_queryVec, h_queries + queryId * D, D * sizeof(float));
-        if (h_groundtruth != nullptr) {
+        if (h_groundtruth != nullptr && !forceDynamicGroundtruth) {
+            // Use static groundtruth (original behavior)
             gtForQuery = h_groundtruth + queryId * gtK;
             hasGroundtruth = true;
         }
@@ -510,10 +538,19 @@ void ConcurrentExecutor::processQuery(const Operation& op) {
     cudaMemcpyAsync(res.d_queryVec, res.h_queryVec, D * sizeof(float),
                     cudaMemcpyHostToDevice, stream);
 
-    // Compute groundtruth for embedded vectors
+    // Compute dynamic groundtruth if needed
     unsigned* computedGroundtruth = nullptr;
     unsigned effectiveGtK = gtK;
-    if (!hasGroundtruth && !op.event.vector.empty()) {
+
+    if (forceDynamicGroundtruth) {
+        // STREAMING MODE: Always compute dynamic groundtruth based on current index state
+        computedGroundtruth = (unsigned*)malloc(k * sizeof(unsigned));
+        computeGroundtruthForQuery(res.d_queryVec, computedGroundtruth, k, stream);
+        gtForQuery = computedGroundtruth;
+        effectiveGtK = k;
+        hasGroundtruth = true;
+    } else if (!hasGroundtruth && !op.event.vector.empty()) {
+        // Original behavior: compute GT only for embedded vectors without static GT
         computedGroundtruth = (unsigned*)malloc(k * sizeof(unsigned));
         computeGroundtruthForQuery(res.d_queryVec, computedGroundtruth, k, stream);
         gtForQuery = computedGroundtruth;
@@ -564,6 +601,13 @@ void ConcurrentExecutor::processQuery(const Operation& op) {
 }
 
 void ConcurrentExecutor::computeGroundtruthForQuery(float* d_queryVec, unsigned* h_gt, unsigned k, cudaStream_t stream) {
+    // Use GPU-accelerated version if available
+    if (useGPUGroundtruth && streamingGT != nullptr) {
+        computeGroundtruthForQueryGPU(d_queryVec, h_gt, k, stream);
+        return;
+    }
+
+    // Fallback: CPU-based computation (original implementation)
     // Allocate distance array on GPU
     float* d_distances;
     cudaMalloc(&d_distances, N * sizeof(float));
@@ -607,6 +651,47 @@ void ConcurrentExecutor::computeGroundtruthForQuery(float* d_queryVec, unsigned*
 
     free(h_distances);
     cudaFree(d_distances);
+}
+
+void ConcurrentExecutor::computeGroundtruthForQueryGPU(float* d_queryVec, unsigned* h_gt, unsigned k, cudaStream_t stream) {
+    if (streamingGT == nullptr) {
+        fprintf(stderr, "[Error] Streaming groundtruth not initialized\n");
+        return;
+    }
+
+    // Use GPU-accelerated streaming groundtruth
+    unsigned* d_deleted = deleteList->getDevicePointer();
+    float* h_gtDists = (float*)malloc(k * sizeof(float));
+
+    bool success = streamingGT->computeSingleQuery(d_queryVec, h_gt, h_gtDists, k,
+                                                   d_deleted, stream);
+
+    if (!success) {
+        fprintf(stderr, "[Error] GPU groundtruth computation failed\n");
+    }
+
+    free(h_gtDists);
+}
+
+void ConcurrentExecutor::computeBatchGroundtruthGPU(float* d_queryBatch, unsigned batchSize,
+                                                   unsigned* h_gtBatch, unsigned k, cudaStream_t stream) {
+    if (streamingGT == nullptr) {
+        fprintf(stderr, "[Error] Streaming groundtruth not initialized\n");
+        return;
+    }
+
+    // Use GPU-accelerated streaming groundtruth for batch
+    unsigned* d_deleted = deleteList->getDevicePointer();
+    float* h_gtDistsBatch = (float*)malloc(batchSize * k * sizeof(float));
+
+    bool success = streamingGT->computeBatchQueries(d_queryBatch, batchSize, h_gtBatch,
+                                                    h_gtDistsBatch, k, d_deleted, stream);
+
+    if (!success) {
+        fprintf(stderr, "[Error] GPU batch groundtruth computation failed\n");
+    }
+
+    free(h_gtDistsBatch);
 }
 
 double ConcurrentExecutor::calculateRecall(unsigned* groundtruth, unsigned* results,
@@ -828,14 +913,31 @@ void ConcurrentExecutor::processBatchQueries(std::vector<Operation>& batch) {
     double totalTimeMs = std::chrono::duration<double, std::milli>(end - start).count();
     double avgTimeMs = totalTimeMs / batchSize;
 
+    // Compute dynamic groundtruth for batch if needed
+    unsigned* h_batchGroundtruth = nullptr;
+    if (forceDynamicGroundtruth && useGPUGroundtruth && streamingGT != nullptr) {
+        h_batchGroundtruth = (unsigned*)malloc(batchSize * k * sizeof(unsigned));
+
+        // Compute GT for entire batch using GPU
+        computeBatchGroundtruthGPU(d_batchQueries, batchSize, h_batchGroundtruth, k, 0);
+    }
+
     // Calculate recall for each query and update stats
     for (unsigned i = 0; i < batchSize; i++) {
         const Operation& op = batch[i];
         unsigned* results = h_batchResults + i * k;
 
         double recall5 = 0.0, recall10 = 0.0;
-        if (h_groundtruth != nullptr && op.event.vector.empty()) {
-            unsigned* gtForQuery = h_groundtruth + op.event.queryId * gtK;
+        unsigned* gtForQuery = nullptr;
+
+        if (forceDynamicGroundtruth && h_batchGroundtruth != nullptr) {
+            // Use dynamic groundtruth computed for this batch
+            gtForQuery = h_batchGroundtruth + i * k;
+            recall5 = calculateRecall(gtForQuery, results, k, k, std::min(k, 5u));
+            recall10 = calculateRecall(gtForQuery, results, k, k, std::min(k, 10u));
+        } else if (h_groundtruth != nullptr && op.event.vector.empty()) {
+            // Use static groundtruth (original behavior)
+            gtForQuery = h_groundtruth + op.event.queryId * gtK;
             recall5 = calculateRecall(gtForQuery, results, gtK, k, std::min(k, 5u));
             recall10 = calculateRecall(gtForQuery, results, gtK, k, std::min(k, 10u));
         }
@@ -843,7 +945,12 @@ void ConcurrentExecutor::processBatchQueries(std::vector<Operation>& batch) {
         stats.addQuery(avgTimeMs, recall5, recall10);
     }
 
-    // No cleanup needed - using pre-allocated buffers
+    // Cleanup dynamic GT
+    if (h_batchGroundtruth) {
+        free(h_batchGroundtruth);
+    }
+
+    // No cleanup needed for pre-allocated buffers
 }
 
 void ConcurrentExecutor::batchWorker() {
