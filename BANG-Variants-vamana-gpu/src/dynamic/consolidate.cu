@@ -178,9 +178,9 @@ unsigned consolidateDeletes(uint8_t* d_graph,
     }
 
     if (verbose) {
-        printf("\n╔════════════════════════════════════════════╗\n");
-        printf("║   Consolidating %6u Deletions           ║\n", deleteCount);
-        printf("╚════════════════════════════════════════════╝\n");
+        printf("\n");
+        printf("  Consolidating %6u Deletions      ", deleteCount);
+        printf("\n");
     }
 
     // Step 1: Find affected nodes (those with deleted neighbors)
